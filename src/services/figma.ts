@@ -1,11 +1,11 @@
-import path from "path";
 import type {
   GetImagesResponse,
   GetFileResponse,
   GetFileNodesResponse,
   GetImageFillsResponse,
+  GetFileComponentsResponse,
+  GetTeamComponentsResponse,
 } from "@figma/rest-api-spec";
-import { downloadFigmaImage } from "~/utils/common.js";
 import { downloadAndProcessImage, type ImageProcessingResult } from "~/utils/image-processing.js";
 import { Logger, writeLogs } from "~/utils/logger.js";
 import { fetchWithRetry } from "~/utils/fetch-with-retry.js";
@@ -284,6 +284,32 @@ export class FigmaService {
 
     const response = await this.request<GetFileNodesResponse>(endpoint);
     writeLogs("figma-raw.json", response);
+
+    return response;
+  }
+
+  /**
+   * Get published components from a specific file
+   */
+  async getFileComponents(fileKey: string): Promise<GetFileComponentsResponse> {
+    const endpoint = `/files/${fileKey}/components`;
+    Logger.log(`Retrieving components from file: ${fileKey}`);
+
+    const response = await this.request<GetFileComponentsResponse>(endpoint);
+    writeLogs("figma-components.json", response);
+
+    return response;
+  }
+
+  /**
+   * Get published components from a team
+   */
+  async getTeamComponents(teamId: string): Promise<GetTeamComponentsResponse> {
+    const endpoint = `/teams/${teamId}/components`;
+    Logger.log(`Retrieving components from team: ${teamId}`);
+
+    const response = await this.request<GetTeamComponentsResponse>(endpoint);
+    writeLogs("figma-team-components.json", response);
 
     return response;
   }

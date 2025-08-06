@@ -27,6 +27,7 @@ export function extractFromDesign(
   const context: TraversalContext = {
     globalVars,
     currentDepth: 0,
+    options,
   };
 
   const processedNodes = nodes
@@ -75,7 +76,25 @@ function processNodeWithExtractors(
 
     // Use the same pattern as the existing parseNode function
     if (hasValue("children", node) && node.children.length > 0) {
-      const children = node.children
+      let childrenToProcess = node.children;
+
+      // For INSTANCE nodes without full data requested, only include children with overrides
+      if (node.type === "INSTANCE" && !options.includeFullInstanceData && hasValue("overrides", node)) {
+        const overrideNodeIds = new Set(
+          (node.overrides as any[])?.map((override) => 
+            // Extract the child node ID from override IDs like "I6317:6851;6465:24096"
+            override.id.includes(';') ? override.id.split(';')[1] : override.id
+          ) || []
+        );
+        
+        childrenToProcess = node.children.filter((child) => 
+          overrideNodeIds.has(child.id) || 
+          // Also include children that might contain overridden nodes
+          hasValue("children", child) && Array.isArray(child.children) && child.children.length > 0
+        );
+      }
+
+      const children = childrenToProcess
         .filter((child) => shouldProcessNode(child, options))
         .map((child) => processNodeWithExtractors(child, extractors, childContext, options))
         .filter((child): child is SimplifiedNode => child !== null);
@@ -116,6 +135,18 @@ function shouldTraverseChildren(
 ): boolean {
   // Check depth limit
   if (options.maxDepth !== undefined && context.currentDepth >= options.maxDepth) {
+    return false;
+  }
+
+  // For INSTANCE nodes, only traverse children if full instance data is requested
+  // or if the children are slot-type children (have overrides)
+  if (node.type === "INSTANCE" && !options.includeFullInstanceData) {
+    // Check if this instance has children with overrides
+    if (hasValue("overrides", node) && Array.isArray(node.overrides) && node.overrides.length > 0) {
+      // Allow traversal of children that have overrides (they are slots or customized)
+      return true;
+    }
+    // Skip children of instances without overrides - they are just template children
     return false;
   }
 

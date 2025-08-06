@@ -25,6 +25,13 @@ const parameters = {
     .describe(
       "OPTIONAL. Do NOT use unless explicitly requested by the user. Controls how many levels deep to traverse the node tree.",
     ),
+  includeFullInstanceData: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Whether to include full data for INSTANCE nodes. When false (default), only overridden properties and children are included for better performance and relevance.",
+    ),
 };
 
 const parametersSchema = z.object(parameters);
@@ -37,12 +44,12 @@ async function getFigmaData(
   outputFormat: "yaml" | "json",
 ) {
   try {
-    const { fileKey, nodeId, depth } = params;
+    const { fileKey, nodeId, depth, includeFullInstanceData } = params;
 
     Logger.log(
       `Fetching ${depth ? `${depth} layers deep` : "all layers"} of ${
         nodeId ? `node ${nodeId} from file` : `full file`
-      } ${fileKey}`,
+      } ${fileKey}${includeFullInstanceData ? " (including full instance data)" : ""}`,
     );
 
     // Get raw Figma API response
@@ -56,6 +63,7 @@ async function getFigmaData(
     // Use unified design extraction (handles nodes + components consistently)
     const simplifiedDesign = simplifyRawFigmaObject(rawApiResponse, allExtractors, {
       maxDepth: depth,
+      includeFullInstanceData,
     });
 
     writeLogs("figma-simplified.json", simplifiedDesign);

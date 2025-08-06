@@ -12,11 +12,11 @@ _High impact, foundational improvements_
 
 ### Component & Prototype Support (High Priority)
 
-- [ ] **Add dedicated tool for component extraction** ([#124](https://github.com/GLips/Figma-Context-MCP/issues/124))
-  - [ ] Create `get_figma_components` tool for fetching full component/component set design data including variants and properties
-- [ ] **Improve INSTANCE support**
-  - [ ] Return only overridden values
-  - [ ] Hide children of INSTANCE except for slot type children or if full data is explicitly requested via new tool call parameter
+- [x] **Add dedicated tool for component extraction** ([#124](https://github.com/GLips/Figma-Context-MCP/issues/124))
+  - [x] Create `get_figma_components` tool for fetching full component/component set design data including variants and properties
+- [x] **Improve INSTANCE support**
+  - [x] Return only overridden values
+  - [x] Hide children of INSTANCE except for slot type children or if full data is explicitly requested via new tool call parameter
 - [ ] **Prototype support**
   - [ ] Extract interactivity data (e.g. actions on hover, click, etc.)
   - [ ] Return data on animations / transitions

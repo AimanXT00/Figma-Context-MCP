@@ -26,11 +26,13 @@ export interface TraversalContext {
   globalVars: GlobalVars;
   currentDepth: number;
   parent?: FigmaDocumentNode;
+  options?: TraversalOptions;
 }
 
 export interface TraversalOptions {
   maxDepth?: number;
   nodeFilter?: (node: FigmaDocumentNode) => boolean;
+  includeFullInstanceData?: boolean;
 }
 
 /**
@@ -75,6 +77,9 @@ export interface SimplifiedNode {
   // for rect-specific strokes, etc.
   componentId?: string;
   componentProperties?: ComponentProperties[];
+  // instance-specific properties
+  overrides?: Array<{ id: string; overriddenFields: string[] }>;
+  hasOverrides?: boolean;
   // children
   children?: SimplifiedNode[];
 }

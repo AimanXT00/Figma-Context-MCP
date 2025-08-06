@@ -116,6 +116,18 @@ export const componentExtractor: ExtractorFn = (node, result, context) => {
         }),
       );
     }
+
+    // Extract overrides information to identify what has been modified
+    if (hasValue("overrides", node) && Array.isArray(node.overrides) && node.overrides.length > 0) {
+      result.overrides = node.overrides.map((override: any) => ({
+        id: override.id,
+        overriddenFields: override.overriddenFields,
+      }));
+
+      // Mark this as an instance with overrides for special handling
+      result.hasOverrides = true;
+      
+    }
   }
 };
 

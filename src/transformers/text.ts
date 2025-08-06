@@ -1,5 +1,6 @@
 import type { Node as FigmaDocumentNode } from "@figma/rest-api-spec";
 import { hasValue, isTruthy } from "~/utils/identity.js";
+import { buildSimplifiedText } from "./textFormatter.js";
 
 export type SimplifiedTextStyle = Partial<{
   fontFamily: string;
@@ -27,6 +28,12 @@ export function hasTextStyle(
 // Keep other simple properties directly
 export function extractNodeText(n: FigmaDocumentNode) {
   if (hasValue("characters", n, isTruthy)) {
+    // Try to get formatted text first (handles mixed styling)
+    const formattedText = buildSimplifiedText(n);
+    if (formattedText) {
+      return formattedText;
+    }
+    // Fallback to plain text
     return n.characters;
   }
 }

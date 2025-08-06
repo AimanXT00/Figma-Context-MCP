@@ -8,11 +8,13 @@ import { Logger, writeLogs } from "~/utils/logger.js";
 const parameters = {
   fileKey: z
     .string()
+    .regex(/^[a-zA-Z0-9]+$/, "File key must be alphanumeric")
     .describe(
       "The key of the Figma file to fetch, often found in a provided URL like figma.com/(file|design)/<fileKey>/...",
     ),
   nodeId: z
     .string()
+    .regex(/^\d+:\d+$/, "Node ID must be in the format of 'number:number'")
     .optional()
     .describe(
       "The ID of the node to fetch, often found as URL parameter node-id=<nodeId>, always use if provided",

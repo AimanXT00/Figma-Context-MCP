@@ -9,6 +9,7 @@ import type {
 import { downloadAndProcessImage, type ImageProcessingResult } from "~/utils/image-processing.js";
 import { Logger, writeLogs } from "~/utils/logger.js";
 import { fetchWithRetry } from "~/utils/fetch-with-retry.js";
+import { categorizeError, FigmaContextError } from "~/utils/error-handling.js";
 
 export type FigmaAuthOptions = {
   figmaApiKey: string;
@@ -64,10 +65,19 @@ export class FigmaService {
 
       return await fetchWithRetry<T>(`${this.baseUrl}${endpoint}`, { headers });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to make request to Figma API endpoint '${endpoint}': ${errorMessage}`,
-      );
+      if (error instanceof FigmaContextError) {
+        // Add endpoint context to existing error
+        error.context.endpoint = endpoint;
+        error.context.baseUrl = this.baseUrl;
+        throw error;
+      }
+      
+      // Categorize unknown errors
+      throw categorizeError(error, {
+        endpoint,
+        baseUrl: this.baseUrl,
+        authMethod: this.useOAuth ? 'oauth' : 'api-key'
+      });
     }
   }
 

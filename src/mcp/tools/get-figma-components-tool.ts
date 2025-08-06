@@ -3,6 +3,7 @@ import { FigmaService } from "~/services/figma.js";
 import { simplifyRawFigmaObject, allExtractors } from "~/extractors/index.js";
 import yaml from "js-yaml";
 import { Logger, writeLogs } from "~/utils/logger.js";
+import { FigmaContextError, ErrorType } from "~/utils/error-handling.js";
 
 const parameters = {
   fileKey: z
@@ -161,11 +162,39 @@ async function getFigmaComponents(
       content: [{ type: "text" as const, text: formattedResult }],
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : JSON.stringify(error);
-    Logger.error(`Error fetching components:`, message);
+    let figmaError: FigmaContextError;
+    
+    if (error instanceof FigmaContextError) {
+      figmaError = error;
+    } else {
+      figmaError = new FigmaContextError({
+        message: error instanceof Error ? error.message : String(error),
+        type: ErrorType.UNKNOWN_ERROR,
+        context: { fileKey: params.fileKey, teamId: params.teamId, componentKey: params.componentKey, includeComponentDetails: params.includeComponentDetails },
+        cause: error instanceof Error ? error : undefined
+      });
+    }
+    
+    Logger.error(`Error fetching components:`, figmaError.toDetailedString());
+    
+    // Provide detailed error information for LLM processing
+    const errorResponse = [
+      `# Figma Components API Error\n`,
+      `**Error Type**: ${figmaError.type}\n`,
+      `**User-Friendly Message**: ${figmaError.userFriendlyMessage}\n`,
+      `**Suggested Action**: ${figmaError.suggestedAction}\n`,
+      figmaError.technicalDetails ? `**Technical Details**: ${figmaError.technicalDetails}\n` : '',
+      figmaError.retryable ? '**Note**: This error may be temporary and could succeed if retried.\n' : '',
+      '\n**Context**:\n',
+      params.fileKey ? `- File Key: ${params.fileKey}\n` : '',
+      params.teamId ? `- Team ID: ${params.teamId}\n` : '',
+      params.componentKey ? `- Component Key: ${params.componentKey}\n` : '',
+      `- Include Component Details: ${params.includeComponentDetails}\n`
+    ].join('');
+    
     return {
       isError: true,
-      content: [{ type: "text" as const, text: `Error fetching components: ${message}` }],
+      content: [{ type: "text" as const, text: errorResponse }],
     };
   }
 }

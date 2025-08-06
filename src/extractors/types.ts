@@ -56,6 +56,7 @@ export interface SimplifiedDesign {
   components: Record<string, SimplifiedComponentDefinition>;
   componentSets: Record<string, SimplifiedComponentSetDefinition>;
   globalVars: GlobalVars;
+  warnings?: string[];
 }
 
 export interface SimplifiedNode {

@@ -73,10 +73,10 @@ _Improving usability and integration_
 
 ### Performance & Reliability
 
-- [ ] **Better error handling**
-  - [ ] Retry logic for API failures
-  - [ ] Graceful degradation
-  - [ ] Detailed error messages which the LLM can expand on for users
+- [x] **Better error handling**
+  - [x] Retry logic for API failures with exponential backoff
+  - [x] Graceful degradation with fallback extraction modes
+  - [x] Detailed error messages which the LLM can expand on for users
 
 ### Documentation & Testing
 

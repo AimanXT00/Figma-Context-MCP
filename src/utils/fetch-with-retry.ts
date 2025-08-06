@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { Logger } from "./logger.js";
+import { withRetry, categorizeError, FigmaContextError, ErrorType } from "./error-handling.js";
 
 const execAsync = promisify(exec);
 
@@ -14,58 +15,103 @@ type RequestOptions = RequestInit & {
 };
 
 export async function fetchWithRetry<T>(url: string, options: RequestOptions = {}): Promise<T> {
-  try {
-    const response = await fetch(url, options);
-
-    if (!response.ok) {
-      throw new Error(`Fetch failed with status ${response.status}: ${response.statusText}`);
-    }
-    return (await response.json()) as T;
-  } catch (fetchError: any) {
-    Logger.log(
-      `[fetchWithRetry] Initial fetch failed for ${url}: ${fetchError.message}. Likely a corporate proxy or SSL issue. Attempting curl fallback.`,
-    );
-
-    const curlHeaders = formatHeadersForCurl(options.headers);
-    // Most options here are to ensure stderr only contains errors, so we can use it to confidently check if an error occurred.
-    // -s: Silent mode—no progress bar in stderr
-    // -S: Show errors in stderr
-    // --fail-with-body: curl errors with code 22, and outputs body of failed request, e.g. "Fetch failed with status 404"
-    // -L: Follow redirects
-    const curlCommand = `curl -s -S --fail-with-body -L ${curlHeaders.join(" ")} "${url}"`;
-
+  const context = { url, hasHeaders: !!options.headers };
+  
+  return withRetry(async () => {
     try {
-      // Fallback to curl for  corporate networks that have proxies that sometimes block fetch
-      Logger.log(`[fetchWithRetry] Executing curl command: ${curlCommand}`);
-      const { stdout, stderr } = await execAsync(curlCommand);
-
-      if (stderr) {
-        // curl often outputs progress to stderr, so only treat as error if stdout is empty
-        // or if stderr contains typical error keywords.
-        if (
-          !stdout ||
-          stderr.toLowerCase().includes("error") ||
-          stderr.toLowerCase().includes("fail")
-        ) {
-          throw new Error(`Curl command failed with stderr: ${stderr}`);
-        }
-        Logger.log(
-          `[fetchWithRetry] Curl command for ${url} produced stderr (but might be informational): ${stderr}`,
+      const response = await fetch(url, options);
+      
+      if (!response.ok) {
+        throw categorizeError(
+          new Error(`HTTP ${response.status}: ${response.statusText}`),
+          { ...context, statusCode: response.status, responseText: response.statusText }
         );
       }
-
-      if (!stdout) {
-        throw new Error("Curl command returned empty stdout.");
+      
+      const data = await response.json();
+      return data as T;
+    } catch (fetchError: any) {
+      // If it's already a FigmaContextError, re-throw it
+      if (fetchError instanceof FigmaContextError) {
+        throw fetchError;
       }
-
-      return JSON.parse(stdout) as T;
-    } catch (curlError: any) {
-      Logger.error(`[fetchWithRetry] Curl fallback also failed for ${url}: ${curlError.message}`);
-      // Re-throw the original fetch error to give context about the initial failure
-      // or throw a new error that wraps both, depending on desired error reporting.
-      // For now, re-throwing the original as per the user example's spirit.
-      throw fetchError;
+      
+      Logger.log(
+        `[fetchWithRetry] Fetch failed for ${url}: ${fetchError.message}. Attempting curl fallback.`,
+      );
+      
+      // Try curl fallback for network issues (common in corporate environments)
+      return await attemptCurlFallback(url, options, context, fetchError);
     }
+  }, context);
+}
+
+/**
+ * Attempts to use curl as a fallback when fetch fails
+ */
+async function attemptCurlFallback<T>(
+  url: string, 
+  options: RequestOptions, 
+  context: Record<string, any>,
+  originalError: Error
+): Promise<T> {
+  const curlHeaders = formatHeadersForCurl(options.headers);
+  const curlCommand = `curl -s -S --fail-with-body -L ${curlHeaders.join(" ")} "${url}"`;
+  
+  try {
+    Logger.log(`[fetchWithRetry] Executing curl fallback: ${curlCommand}`);
+    const { stdout, stderr } = await execAsync(curlCommand);
+    
+    if (stderr) {
+      if (
+        !stdout ||
+        stderr.toLowerCase().includes("error") ||
+        stderr.toLowerCase().includes("fail") ||
+        stderr.toLowerCase().includes("401") ||
+        stderr.toLowerCase().includes("403") ||
+        stderr.toLowerCase().includes("404")
+      ) {
+        // Extract status code from stderr if possible
+        const statusMatch = stderr.match(/(\d{3})/);
+        const statusCode = statusMatch ? parseInt(statusMatch[1]) : undefined;
+        
+        throw categorizeError(
+          new Error(`Curl command failed: ${stderr}`),
+          { ...context, statusCode, method: 'curl', stderr }
+        );
+      }
+      Logger.log(
+        `[fetchWithRetry] Curl produced informational stderr: ${stderr}`,
+      );
+    }
+    
+    if (!stdout) {
+      throw new FigmaContextError({
+        message: "Curl command returned empty response",
+        type: ErrorType.NETWORK_ERROR,
+        context: { ...context, method: 'curl' }
+      });
+    }
+    
+    try {
+      return JSON.parse(stdout) as T;
+    } catch (parseError) {
+      throw new FigmaContextError({
+        message: "Failed to parse JSON response from curl",
+        type: ErrorType.PARSING_ERROR,
+        context: { ...context, method: 'curl', responsePreview: stdout.substring(0, 200) },
+        cause: parseError as Error
+      });
+    }
+  } catch (curlError: any) {
+    if (curlError instanceof FigmaContextError) {
+      throw curlError;
+    }
+    
+    Logger.error(`[fetchWithRetry] Curl fallback failed for ${url}: ${curlError.message}`);
+    
+    // Return the more informative error between fetch and curl
+    throw categorizeError(originalError, { ...context, curlError: curlError.message });
   }
 }
 
